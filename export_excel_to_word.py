@@ -61,17 +61,25 @@ def export_excel_to_word(excel_file, sheet_name, word_file, section_title):
             logger.error(f"Header '{section_title}' with style 'Custom' not found in the Word document.")
             return
 
-        # Count total items (text + images)
-        total_items = len(data)
-
-        # Open Excel to count images
+        # Open Excel to count images and maintain their order
         excel = win32com.client.Dispatch("Excel.Application")
         excel.Visible = False  # Run in the background
         wb_xl = excel.Workbooks.Open(os.path.abspath(excel_file))
         sheet_xl = wb_xl.Sheets[sheet_name]
 
         shapes = sheet_xl.Shapes  # Get all shapes (includes pasted screenshots)
-        total_items += shapes.Count
+        image_list = []
+
+        for i in range(1, shapes.Count + 1):
+            shape = shapes.Item(i)
+            try:
+                image_list.append((shape.TopLeftCell.Row, shape))  # Store row position
+            except Exception as e:
+                logger.warning(f"Could not determine row position for image '{shape.Name}'. Error: {e}")
+
+        # Sort images by row position to maintain order
+        image_list.sort(key=lambda x: x[0])
+        total_items = len(data) + len(image_list)
 
         # Create new paragraphs for all items at the correct position
         for _ in range(total_items):
@@ -91,9 +99,8 @@ def export_excel_to_word(excel_file, sheet_name, word_file, section_title):
                     doc.paragraphs[insert_index].add_run(cell)
                     insert_index += 1
 
-        # Insert images after text
-        for i in range(1, shapes.Count + 1):
-            shape = shapes.Item(i)
+        # Insert images in correct order
+        for _, shape in image_list:
             image_path = f"temp_image_{shape.Name}.png"
 
             try:
