@@ -51,50 +51,65 @@ def export_excel_to_word(excel_file, sheet_name, word_file, section_title):
         # Load the Word document
         doc = Document(word_file)
 
-        # Find the section where to insert data
+        # Locate the custom styled header
         found = False
-        for para in doc.paragraphs:
-            if section_title in para.text:
+        insert_index = None
+
+        for i, para in enumerate(doc.paragraphs):
+            if para.style.name == "Custom" and section_title in para.text:
                 found = True
-                para.add_run("\n")  # Add space before inserting content
+                insert_index = i + 1  # Start checking from the next paragraph
                 break
 
         if not found:
-            logger.error(f"Section '{section_title}' not found in the Word document.")
+            logger.error(f"Header '{section_title}' with style 'Custom' not found in the Word document.")
             return
 
-        # Insert the text first
+        # Find the first empty paragraph after the "Custom" style header
+        while insert_index < len(doc.paragraphs) and doc.paragraphs[insert_index].text.strip():
+            insert_index += 1
+
+        # If no empty paragraph found, add a new one
+        if insert_index >= len(doc.paragraphs):
+            doc.add_paragraph("")
+            insert_index = len(doc.paragraphs) - 1
+
+        # Insert text at the found position
         for row_data in data:
             for cell in row_data:
                 if cell.strip():  # Avoid empty cells
-                    doc.add_paragraph(cell)  # Insert text from the cell
+                    doc.paragraphs[insert_index].add_run(cell)
+                    insert_index += 1  # Move to the next line
+                    if insert_index >= len(doc.paragraphs):
+                        doc.add_paragraph("")  # Add a new paragraph if needed
+                        insert_index = len(doc.paragraphs) - 1
 
         # Collect and insert images after text
         excel = win32com.client.Dispatch("Excel.Application")
         excel.Visible = False  # Run in the background
         wb_xl = excel.Workbooks.Open(os.path.abspath(excel_file))
-        sheet_xl = wb_xl.Sheets(sheet_name)
+        sheet_xl = wb_xl.Sheets[sheet_name]
 
         shapes = sheet_xl.Shapes  # Get all shapes (includes pasted screenshots)
 
         if shapes.Count == 0:
             logger.warning("No images found in the sheet.")
 
-        # Process and insert images in the correct order
+        # Insert images at the same position after the last inserted text
         for i in range(1, shapes.Count + 1):
             shape = shapes.Item(i)
             image_path = f"temp_image_{shape.Name}.png"
 
             try:
-                # Export shape to image file using clipboard
                 shape.Copy()
-                time.sleep(0.5)  # Allow time for clipboard processing
+                time.sleep(0.5)  # Allow clipboard processing
                 image = ImageGrab.grabclipboard()
                 if image:
                     image.save(image_path, 'PNG')
 
-                    # Insert image into Word
-                    doc.add_picture(image_path, width=Inches(MAX_WIDTH_INCHES))
+                    # Insert image after last text insertion
+                    doc.paragraphs[insert_index].add_run().add_picture(image_path, width=Inches(MAX_WIDTH_INCHES))
+                    insert_index += 1  # Move to the next line
 
                     os.remove(image_path)  # Clean up temp image
                     logger.info(f"Image '{shape.Name}' added successfully.")
