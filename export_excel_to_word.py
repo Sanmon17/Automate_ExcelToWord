@@ -51,51 +51,47 @@ def export_excel_to_word(excel_file, sheet_name, word_file, section_title):
         # Load the Word document
         doc = Document(word_file)
 
-        # Locate the custom styled header
-        found = False
+        # Step 1: Locate the custom styled header and create new paragraphs
         insert_index = None
-
         for i, para in enumerate(doc.paragraphs):
             if para.style.name == "Custom" and section_title in para.text:
-                found = True
-                insert_index = i + 1  # Start checking from the next paragraph
+                insert_index = i + 1
                 break
-
-        if not found:
+        else:
             logger.error(f"Header '{section_title}' with style 'Custom' not found in the Word document.")
             return
 
-        # Find the first empty paragraph after the "Custom" style header
-        while insert_index < len(doc.paragraphs) and doc.paragraphs[insert_index].text.strip():
-            insert_index += 1
+        # Count total items (text + images)
+        total_items = len(data)
 
-        # If no empty paragraph found, add a new one
-        if insert_index >= len(doc.paragraphs):
-            doc.add_paragraph("")
-            insert_index = len(doc.paragraphs) - 1
-
-        # Insert text at the found position
-        for row_data in data:
-            for cell in row_data:
-                if cell.strip():  # Avoid empty cells
-                    doc.paragraphs[insert_index].add_run(cell)
-                    insert_index += 1  # Move to the next line
-                    if insert_index >= len(doc.paragraphs):
-                        doc.add_paragraph("")  # Add a new paragraph if needed
-                        insert_index = len(doc.paragraphs) - 1
-
-        # Collect and insert images after text
+        # Open Excel to count images
         excel = win32com.client.Dispatch("Excel.Application")
         excel.Visible = False  # Run in the background
         wb_xl = excel.Workbooks.Open(os.path.abspath(excel_file))
         sheet_xl = wb_xl.Sheets[sheet_name]
 
         shapes = sheet_xl.Shapes  # Get all shapes (includes pasted screenshots)
+        total_items += shapes.Count
 
-        if shapes.Count == 0:
-            logger.warning("No images found in the sheet.")
+        # Create new paragraphs for all items at the correct position
+        for _ in range(total_items):
+            doc.paragraphs[insert_index].insert_paragraph_before("")
 
-        # Insert images at the same position after the last inserted text
+        # Step 2: Locate the custom styled header again and insert data
+        insert_index = None
+        for i, para in enumerate(doc.paragraphs):
+            if para.style.name == "Custom" and section_title in para.text:
+                insert_index = i + 1
+                break
+
+        # Insert text data
+        for row_data in data:
+            for cell in row_data:
+                if cell.strip():  # Avoid empty cells
+                    doc.paragraphs[insert_index].add_run(cell)
+                    insert_index += 1
+
+        # Insert images after text
         for i in range(1, shapes.Count + 1):
             shape = shapes.Item(i)
             image_path = f"temp_image_{shape.Name}.png"
@@ -107,7 +103,7 @@ def export_excel_to_word(excel_file, sheet_name, word_file, section_title):
                 if image:
                     image.save(image_path, 'PNG')
 
-                    # Insert image after last text insertion
+                    # Insert image at the designated paragraph
                     doc.paragraphs[insert_index].add_run().add_picture(image_path, width=Inches(MAX_WIDTH_INCHES))
                     insert_index += 1  # Move to the next line
 
