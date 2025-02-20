@@ -5,8 +5,8 @@ import time
 import win32com.client  # Requires `pywin32`
 from docx import Document
 from docx.shared import Inches
-from PIL import ImageGrab  # For extracting images from clipboard
 import logging
+from PIL import ImageGrab  # Requires `Pillow`
 
 # Set max width (in inches) for images in Word
 MAX_WIDTH_INCHES = 6.5  # Adjust as needed
@@ -70,8 +70,6 @@ def export_excel_to_word(excel_file, sheet_name, word_file, section_title):
                     doc.add_paragraph(cell)  # Insert text from the cell
 
         # Collect and insert images after text
-        image_list = []
-
         excel = win32com.client.Dispatch("Excel.Application")
         excel.Visible = False  # Run in the background
         wb_xl = excel.Workbooks.Open(os.path.abspath(excel_file))
@@ -82,46 +80,26 @@ def export_excel_to_word(excel_file, sheet_name, word_file, section_title):
         if shapes.Count == 0:
             logger.warning("No images found in the sheet.")
 
+        # Process and insert images in the correct order
         for i in range(1, shapes.Count + 1):
             shape = shapes.Item(i)
-            shape_top = shape.Top  # Get the vertical position (top) of the shape
-            shape_left = shape.Left  # Get the horizontal position (left) of the shape
-            image_list.append((shape, shape_top, shape_left))
-
-        # Sort images by their top-left position (row first, then column)
-        image_list.sort(key=lambda x: (x[1], x[2]))  # Sort by vertical position, then horizontal
-
-        # Process and insert images in the correct order
-        for shape, _, _ in image_list:
             image_path = f"temp_image_{shape.Name}.png"
 
             try:
-                shape.Copy()  # Copy image to clipboard
-                time.sleep(1)  # Allow time for clipboard processing
-
-                # Get image from clipboard
-                img = ImageGrab.grabclipboard()
-                if img:
-                    img.save(image_path, format="PNG")
-
-                    # Get original image size (in pixels)
-                    img_width, img_height = img.size
-
-                    # Convert pixels to inches (assuming 96 dpi)
-                    width_inches = img_width / 96
-                    height_inches = img_height / 96
-
-                    # Scale down if too big
-                    if width_inches > MAX_WIDTH_INCHES:
-                        scale_factor = MAX_WIDTH_INCHES / width_inches
-                        width_inches = MAX_WIDTH_INCHES
-                        height_inches *= scale_factor  # Maintain aspect ratio
+                # Export shape to image file using clipboard
+                shape.Copy()
+                time.sleep(0.5)  # Allow time for clipboard processing
+                image = ImageGrab.grabclipboard()
+                if image:
+                    image.save(image_path, 'PNG')
 
                     # Insert image into Word
-                    doc.add_picture(image_path, width=Inches(width_inches), height=Inches(height_inches))
+                    doc.add_picture(image_path, width=Inches(MAX_WIDTH_INCHES))
 
                     os.remove(image_path)  # Clean up temp image
-                    logger.info(f"Image '{shape.Name}' added successfully at {width_inches:.2f} x {height_inches:.2f} inches.")
+                    logger.info(f"Image '{shape.Name}' added successfully.")
+                else:
+                    logger.warning(f"Clipboard does not contain an image for '{shape.Name}'.")
 
             except Exception as e:
                 logger.warning(f"Could not process image '{shape.Name}'. Error: {e}")
