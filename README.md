@@ -33,5 +33,5 @@ This command will extract data from the "Sheet1" of report.xlsx, and insert the 
 
 # Note:
 - This script will skip data from cell 1 to 4 of the excel file as I customized it for my work.<br>
-- It start altering text and image from second text data. (customized for my work)
+- It start altering between text and image from second text data. (customized for my work)
 - **It uses Clipboard to transfer data, so it is recommended to clear clipboard history after many runs by using the keyboard shortcut<br> `Win + V` 🖱️.**
