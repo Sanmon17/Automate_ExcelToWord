@@ -92,35 +92,44 @@ def export_excel_to_word(excel_file, sheet_name, word_file, section_title):
                 insert_index = i + 1
                 break
 
-        # Insert text data
-        for row_data in data:
-            for cell in row_data:
-                if cell.strip():  # Avoid empty cells
+        # Insert the first text paragraph
+        if data:
+            for cell in data[0]:
+                if cell.strip():
                     doc.paragraphs[insert_index].add_run(cell)
                     insert_index += 1
+            data_index = 1  # Start from the second text entry
+        else:
+            data_index = 0
 
-        # Insert images in correct order
-        for _, shape in image_list:
-            image_path = f"temp_image_{shape.Name}.png"
-
-            try:
-                shape.Copy()
-                time.sleep(0.5)  # Allow clipboard processing
-                image = ImageGrab.grabclipboard()
-                if image:
-                    image.save(image_path, 'PNG')
-
-                    # Insert image at the designated paragraph
-                    doc.paragraphs[insert_index].add_run().add_picture(image_path, width=Inches(MAX_WIDTH_INCHES))
-                    insert_index += 1  # Move to the next line
-
-                    os.remove(image_path)  # Clean up temp image
-                    logger.info(f"Image '{shape.Name}' added successfully.")
-                else:
-                    logger.warning(f"Clipboard does not contain an image for '{shape.Name}'.")
-
-            except Exception as e:
-                logger.warning(f"Could not process image '{shape.Name}'. Error: {e}")
+        # Alternate inserting text and images
+        image_index = 0
+        while data_index < len(data) or image_index < len(image_list):
+            if data_index < len(data):
+                for cell in data[data_index]:
+                    if cell.strip():
+                        doc.paragraphs[insert_index].add_run(cell)
+                        insert_index += 1
+                data_index += 1
+            
+            if image_index < len(image_list):
+                _, shape = image_list[image_index]
+                image_path = f"temp_image_{shape.Name}.png"
+                try:
+                    shape.Copy()
+                    time.sleep(0.5)  # Allow clipboard processing
+                    image = ImageGrab.grabclipboard()
+                    if image:
+                        image.save(image_path, 'PNG')
+                        doc.paragraphs[insert_index].add_run().add_picture(image_path, width=Inches(MAX_WIDTH_INCHES))
+                        insert_index += 1
+                        os.remove(image_path)  # Clean up temp image
+                        logger.info(f"Image '{shape.Name}' added successfully.")
+                    else:
+                        logger.warning(f"Clipboard does not contain an image for '{shape.Name}'.")
+                except Exception as e:
+                    logger.warning(f"Could not process image '{shape.Name}'. Error: {e}")
+                image_index += 1
 
         wb_xl.Close(False)
         excel.Quit()
